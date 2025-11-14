@@ -1,0 +1,55 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: gateway-postgres
+    environment:
+      POSTGRES_USER: gateway_user
+      POSTGRES_PASSWORD: gateway_pass
+      POSTGRES_DB: gateway_db
+    volumes:
+      - pgdata_gateway:/var/lib/postgresql/data
+    networks: [gateway-net]
+
+  backend:
+    build: ./backend
+    container_name: gateway-backend
+    depends_on: [postgres]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://gateway_user:gateway_pass@postgres:5432/gateway_db
+      ENCRYPTION_KEY: 8ecK0qjZSoKkP1JYJX8r8gLjMZqTBkx4pT7jO-gxius=
+    networks: [gateway-net]
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "python seeds.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  frontend:
+    build: ./frontend
+    container_name: gateway-frontend
+    depends_on: [backend]
+    networks: [gateway-net]
+    ports:
+      - "8080:80"
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: gateway-nginx
+    restart: always
+    depends_on:
+      - frontend
+      - backend
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "80:80"
+    networks:
+      - gateway-net
+
+volumes:
+  pgdata_gateway:
+
+networks:
+  gateway-net:
+    driver: bridge

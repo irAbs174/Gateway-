@@ -1,0 +1,49 @@
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  DATABASE_URL: "postgresql+asyncpg://gateway_user:gateway_pass@postgres:5432/gateway_db"
+  ENCRYPTION_KEY: "8ecK0qjZSoKkP1JYJX8r8gLjMZqTBkx4pT7jO-gxius="
+  IMAGE_TAG: "gateway-app:latest"
+
+# ---------- TEST ----------
+test:
+  stage: test
+  image: python:3.11-slim
+  services:
+    - postgres:15
+  variables:
+    POSTGRES_DB: gateway_db
+    POSTGRES_USER: gateway_user
+    POSTGRES_PASSWORD: gateway_pass
+  script:
+    - pip install -r backend/requirements.txt
+    - pytest backend/tests -v
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+
+# ---------- BUILD ----------
+build:
+  stage: build
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  script:
+    - docker build -t ${IMAGE_TAG} ./backend
+    - docker build -t gateway-frontend ./frontend
+
+# ---------- DEPLOY ----------
+deploy:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache docker-compose bash
+  script:
+    - docker-compose down
+    - docker-compose up -d --build
+  only:
+    - main
